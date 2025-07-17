@@ -49,7 +49,6 @@ use esp_hal::spi::master::{Spi, SpiDmaBus};
 use esp_hal::time::Rate;
 use esp_hal::timer::systimer::SystemTimer;
 use esp_println as _;
-use dc_load_control_loop_rs2::adc::register::{DefaultFilterConfigRegister, FilterConfig0Register};
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -64,8 +63,6 @@ esp_bootloader_esp_idf::esp_app_desc!();
 async fn main(spawner: Spawner) {
     // generator version: 0.4.0
 
-    let reg: FilterConfig0Register = DefaultFilterConfigRegister::new().into_register();
-    
     let (rx_buffer, rx_descriptors, tx_buffer, tx_descriptors) = dma_buffers!(32000);
     let dma_rx_buf = DmaRxBuf::new(rx_descriptors, rx_buffer).unwrap();
     let dma_tx_buf = DmaTxBuf::new(tx_descriptors, tx_buffer).unwrap();

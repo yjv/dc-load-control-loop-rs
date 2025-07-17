@@ -10,7 +10,7 @@ pub trait WritableRegister<const BUFF_LEN: usize>: Register<BUFF_LEN> {
     fn to_buffer(&self) -> [u8; BUFF_LEN];
 }
 
-pub enum RegisterOperation {
+pub enum RegisterRW {
     Read = 0x40,
     Write = 0x00,
 }
@@ -133,29 +133,6 @@ macro_rules! rw_register {
             }
         }
     };
-    ($fields:tt, 1, $(($name:ident, $id:expr)),+ $(,)?) => {
-        $(
-            rw_register!($name $fields, 1, $id);
-        )+
-    };
-    ($fields:tt, 2, $(($name:ident, $id:expr)),+ $(,)?) => {
-        $(
-            rw_register!($name $fields, 2, $id);
-        )+
-    };
-    ($fields:tt, 3, $(($name:ident, $id:expr)),+ $(,)?) => {
-        $(
-            rw_register!($name $fields, 3, $id);
-        )+
-    };
-    ($fields:tt, 4, $(($name:ident, $id:expr)),+ $(,)?) => {
-        $(
-            rw_register!($name $fields, 4, $id);
-        )+
-    };
-}
-
-macro_rules! multi_rw_register {
     ($fields:tt, 1, $(($name:ident, $id:expr)),+ $(,)?) => {
         $(
             rw_register!($name $fields, 1, $id);

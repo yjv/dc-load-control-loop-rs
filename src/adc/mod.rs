@@ -1,6 +1,6 @@
 use defmt::{debug, Format};
 use embedded_hal::spi::SpiBus;
-use crate::adc::register::{Register, RegisterOperation, WritableRegister};
+use crate::adc::register::{Register, RegisterRW, WritableRegister};
 
 pub mod register;
 
@@ -20,7 +20,7 @@ impl <Bus: SpiBus> ADC<Bus> {
 
     pub fn read<const N: usize, T: Register<N>>(&mut self) -> Result<T, Bus::Error> {
         let id = T::get_id();
-        self.buf[0] = id | RegisterOperation::Read as u8;
+        self.buf[0] = id | RegisterRW::Read as u8;
 
         debug!("Writing register: {:02x} {:012x}", id, self.buf);
         self.spi.transfer_in_place(&mut self.buf[..N + 1])?;
@@ -35,7 +35,7 @@ impl <Bus: SpiBus> ADC<Bus> {
 
     pub fn write<const N: usize, T: WritableRegister<N>>(&mut self, register: &T) -> Result<(), Bus::Error> {
         let id = T::get_id();
-        self.buf[0] = id | RegisterOperation::Write as u8;
+        self.buf[0] = id | RegisterRW::Write as u8;
         self.buf[1..N + 1].copy_from_slice(&register.to_buffer());
 
         debug!("Writing register: {:02x} {:012x}", id, self.buf);
