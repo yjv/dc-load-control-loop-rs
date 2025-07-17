@@ -193,7 +193,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "dc-load-control-loop-rs2"
+name = "dc-load-control-loop-rs"
 version = "0.1.0"
 dependencies = [
  "bitfield",
