@@ -2,6 +2,31 @@ use defmt::{debug, Format};
 use embedded_hal::spi::SpiBus;
 use crate::adc::register::{Register, RegisterRW, WritableRegister};
 
+// Macro to define enums with integer discriminants and implement into_bits/from_bits
+#[macro_export]
+macro_rules! bitfield_enum {
+    (
+        $(#[$meta:meta])* $vis:vis enum $name:ident : $repr:ty {
+            $(
+                $(#[$variant_meta:meta])* $variant:ident = $value:expr
+            ),+ $(,)?
+        }
+    ) => {
+        $(#[$meta])* #[repr($repr)] $vis enum $name {
+            $( $(#[$variant_meta])* $variant = $value ),+
+        }
+        impl $name {
+            pub const fn into_bits(self) -> $repr { self as $repr }
+            pub const fn from_bits(value: $repr) -> Self {
+                match value {
+                    $( $value => $name::$variant, )+
+                    _ => panic!(concat!("Invalid value for ", stringify!($name))),
+                }
+            }
+        }
+    };
+}
+
 pub mod register;
 
 struct ADC<Bus: SpiBus> {
@@ -44,384 +69,287 @@ impl <Bus: SpiBus> ADC<Bus> {
     }
 }
 
-#[derive(Format, Debug, Eq, PartialEq)]
-pub enum Channel {
-    Ch0 = 0x00,
-    Ch1 = 0x01,
-    Ch2 = 0x02,
-    Ch3 = 0x03,
-}
-
-impl Channel {
-    pub const fn into_bits(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn from_bits(value: u8) -> Self {
-        match value {
-            0x00 => Channel::Ch0,
-            0x01 => Channel::Ch1,
-            0x02 => Channel::Ch2,
-            0x03 => Channel::Ch3,
-            _ => panic!("Invalid channel value"),
-        }
+bitfield_enum! {
+    /// ADC channel selection.
+    ///
+    /// Used in the Status Register and Channel Registers to select or indicate the active channel.
+    #[derive(Format, Debug, Eq, PartialEq)]
+    pub enum Channel: u8 {
+        /// Channel 0
+        Ch0 = 0x00,
+        /// Channel 1
+        Ch1 = 0x01,
+        /// Channel 2
+        Ch2 = 0x02,
+        /// Channel 3
+        Ch3 = 0x03,
     }
 }
 
-#[derive(Format, Debug, Eq, PartialEq)]
-pub enum Delay {
-    ZeroMicroseconds = 0x00,
-    FourMicroseconds = 0x01,
-    SixteenMicroseconds = 0x02,
-    FortyMicroseconds = 0x03,
-    OneHundredMicroseconds = 0x04,
-    TwoHundredMicroseconds = 0x05,
-    FiveHundredMicroseconds = 0x06,
-    OneMillisecond = 0x07,
-}
-
-impl Delay {
-    pub const fn into_bits(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn from_bits(value: u8) -> Self {
-        match value {
-            0x00 => Delay::ZeroMicroseconds,
-            0x01 => Delay::FourMicroseconds,
-            0x02 => Delay::SixteenMicroseconds,
-            0x03 => Delay::FortyMicroseconds,
-            0x04 => Delay::OneHundredMicroseconds,
-            0x05 => Delay::TwoHundredMicroseconds,
-            0x06 => Delay::FiveHundredMicroseconds,
-            0x07 => Delay::OneMillisecond,
-            _ => panic!("Invalid delay value"),
-        }
+bitfield_enum! {
+    /// Delay setting for the ADC conversion start.
+    ///
+    /// Used in the ADC Mode Register to select the delay between conversions.
+    /// The delay can be used to allow external circuitry to settle before a conversion starts.
+    #[derive(Format, Debug, Eq, PartialEq)]
+    pub enum Delay: u8 {
+        /// No delay (0 µs)
+        ZeroMicroseconds = 0x00,
+        /// 4 microseconds delay
+        FourMicroseconds = 0x01,
+        /// 16 microseconds delay
+        SixteenMicroseconds = 0x02,
+        /// 40 microseconds delay
+        FortyMicroseconds = 0x03,
+        /// 100 microseconds delay
+        OneHundredMicroseconds = 0x04,
+        /// 200 microseconds delay
+        TwoHundredMicroseconds = 0x05,
+        /// 500 microseconds delay
+        FiveHundredMicroseconds = 0x06,
+        /// 1 millisecond delay
+        OneMillisecond = 0x07,
     }
 }
 
-#[derive(Format, Debug, Eq, PartialEq)]
-pub enum Mode {
-    ContinuousConversion = 0x00,
-    SingleConversion = 0x01,
-    Standby = 0x02,
-    PowerDown = 0x03,
-    InternalOffsetCalibration = 0x04,
-    SystemOffsetCalibration = 0x06,
-    SystemGainCalibration = 0x07,
-}
-
-impl Mode {
-    pub const fn into_bits(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn from_bits(value: u8) -> Self {
-        match value {
-            0x00 => Mode::ContinuousConversion,
-            0x01 => Mode::SingleConversion,
-            0x02 => Mode::Standby,
-            0x03 => Mode::PowerDown,
-            0x04 => Mode::InternalOffsetCalibration,
-            0x06 => Mode::SystemOffsetCalibration,
-            0x07 => Mode::SystemGainCalibration,
-            _ => panic!("Invalid mode value"),
-        }
+bitfield_enum! {
+    /// ADC operating mode.
+    ///
+    /// Used in the ADC Mode Register to select the conversion mode or calibration operation.
+    #[derive(Format, Debug, Eq, PartialEq)]
+    pub enum Mode: u8 {
+        /// Continuous conversion mode. The ADC continuously converts and updates the data register.
+        ContinuousConversion = 0x00,
+        /// Single conversion mode. The ADC performs a single conversion and then enters standby.
+        SingleConversion = 0x01,
+        /// Standby mode. The ADC enters a low-power standby state.
+        Standby = 0x02,
+        /// Power-down mode. The ADC enters a deep power-down state.
+        PowerDown = 0x03,
+        /// Internal offset calibration. The ADC performs an internal offset calibration.
+        InternalOffsetCalibration = 0x04,
+        /// System offset calibration. The ADC performs a system offset calibration.
+        SystemOffsetCalibration = 0x06,
+        /// System gain calibration. The ADC performs a system gain calibration.
+        SystemGainCalibration = 0x07,
     }
 }
 
-#[derive(Format, Debug, Eq, PartialEq)]
-pub enum ClockSource {
-    Internal = 0x00,
-    InternalWithOutput = 0x01,
-    External = 0x02,
-    ExternalCrystal = 0x03,
-}
-
-impl ClockSource {
-    pub const fn into_bits(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn from_bits(value: u8) -> Self {
-        match value {
-            0x00 => ClockSource::Internal,
-            0x01 => ClockSource::InternalWithOutput,
-            0x02 => ClockSource::External,
-            0x03 => ClockSource::ExternalCrystal,
-            _ => panic!("Invalid clock source value"),
-        }
+bitfield_enum! {
+    /// Clock source selection for the ADC.
+    ///
+    /// Used in the ADC Mode Register to select the master clock source.
+    #[derive(Format, Debug, Eq, PartialEq)]
+    pub enum ClockSource: u8 {
+        /// Internal oscillator (default, 16 MHz).
+        Internal = 0x00,
+        /// Internal oscillator with clock output on XTAL2/CLKIO pin.
+        InternalWithOutput = 0x01,
+        /// External clock supplied to XTAL2/CLKIO pin.
+        External = 0x02,
+        /// External crystal connected between XTAL1 and XTAL2/CLKIO.
+        ExternalCrystal = 0x03,
     }
 }
 
-#[derive(Format, Debug, Eq, PartialEq)]
-pub enum Crc {
-    Disabled = 0x00,
-    EnableWithXorOnRead = 0x01,
-    Enable = 0x02,
-}
-
-impl Crc {
-    pub const fn into_bits(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn from_bits(value: u8) -> Self {
-        match value {
-            0x00 => Crc::Disabled,
-            0x01 => Crc::EnableWithXorOnRead,
-            0x02 => Crc::Enable,
-            _ => panic!("Invalid CRC value"),
-        }
+bitfield_enum! {
+    /// CRC mode for communication error checking.
+    ///
+    /// Used in the Interface Mode Register to select CRC or XOR error checking.
+    #[derive(Format, Debug, Eq, PartialEq)]
+    pub enum Crc: u8 {
+        /// CRC disabled.
+        Disabled = 0x00,
+        /// Enable CRC with XOR on readback only.
+        EnableWithXorOnRead = 0x01,
+        /// Enable full CRC on all communication.
+        Enable = 0x02,
     }
 }
 
-#[derive(Format, Debug, Eq, PartialEq)]
-pub enum DataRegisterLength {
-    TwentyFourBits = 0x00,
-    SixteenBits = 0x01,
-}
-
-impl DataRegisterLength {
-    pub const fn into_bits(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn from_bits(value: u8) -> Self {
-        match value {
-            0x00 => DataRegisterLength::TwentyFourBits,
-            0x01 => DataRegisterLength::SixteenBits,
-            _ => panic!("Invalid data register length value"),
-        }
+bitfield_enum! {
+    /// Data register length selection.
+    ///
+    /// Used in the Interface Mode Register to select the number of bits in the data register.
+    #[derive(Format, Debug, Eq, PartialEq)]
+    pub enum DataRegisterLength: u8 {
+        /// 24-bit data register (default).
+        TwentyFourBits = 0x00,
+        /// 16-bit data register (truncates LSBs).
+        SixteenBits = 0x01,
     }
 }
 
-#[derive(Format, Debug, Eq, PartialEq)]
-pub enum SyncErrorPinMode {
-    Disabled = 0x00,
-    ErrorInput = 0x01,
-    OpenDrainErrorOutput = 0x02,
-    ErrDataOutput = 0x03,
-}
-
-impl SyncErrorPinMode {
-    pub const fn into_bits(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn from_bits(value: u8) -> Self {
-        match value {
-            0x00 => SyncErrorPinMode::Disabled,
-            0x01 => SyncErrorPinMode::ErrorInput,
-            0x02 => SyncErrorPinMode::OpenDrainErrorOutput,
-            0x03 => SyncErrorPinMode::ErrDataOutput,
-            _ => panic!("Invalid sync error pin mode value"),
-        }
+bitfield_enum! {
+    /// SYNC/ERROR pin mode selection.
+    ///
+    /// Used in the GPIO Configuration Register to select the function of the SYNC/ERROR pin.
+    #[derive(Format, Debug, Eq, PartialEq)]
+    pub enum SyncErrorPinMode: u8 {
+        /// Pin disabled.
+        Disabled = 0x00,
+        /// Error input mode. Pin acts as an error input.
+        ErrorInput = 0x01,
+        /// Open-drain error output mode. Pin outputs error status.
+        OpenDrainErrorOutput = 0x02,
+        /// Error data output mode. Pin outputs error data.
+        ErrDataOutput = 0x03,
     }
 }
 
-#[derive(Format, Debug, Eq, PartialEq)]
-pub enum Setup {
-    Setup0 = 0x00,
-    Setup1 = 0x01,
-    Setup2 = 0x02,
-    Setup3 = 0x03,
-}
-
-impl Setup {
-    pub const fn into_bits(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn from_bits(value: u8) -> Self {
-        match value {
-            0x00 => Setup::Setup0,
-            0x01 => Setup::Setup1,
-            0x02 => Setup::Setup2,
-            0x03 => Setup::Setup3,
-            _ => panic!("Invalid setup value"),
-        }
+bitfield_enum! {
+    /// Setup selection for channel configuration.
+    ///
+    /// Used in Channel Registers to select which setup configuration to use for a channel.
+    #[derive(Format, Debug, Eq, PartialEq)]
+    pub enum Setup: u8 {
+        /// Use Setup 0
+        Setup0 = 0x00,
+        /// Use Setup 1
+        Setup1 = 0x01,
+        /// Use Setup 2
+        Setup2 = 0x02,
+        /// Use Setup 3
+        Setup3 = 0x03,
     }
 }
 
-#[derive(Format, Debug, Eq, PartialEq)]
-pub enum Input {
-    Analog0 = 0x00,
-    Analog1 = 0x01,
-    Analog2 = 0x02,
-    Analog3 = 0x03,
-    Analog4 = 0x04,
-    TemperatureSensorPos = 0x11,
-    TemperatureSensorNeg = 0x12,
-    Avdd1AvssDiffOver5Pos = 0x13,
-    Avdd1AvssDiffOver5Neg = 0x14,
-    PositiveReferenceVoltage = 0x15,
-    NegativeReferenceVoltage = 0x16,
-}
-
-impl Input {
-    pub const fn into_bits(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn from_bits(value: u8) -> Self {
-        match value {
-            0x00 => Input::Analog0,
-            0x01 => Input::Analog1,
-            0x02 => Input::Analog2,
-            0x03 => Input::Analog3,
-            0x04 => Input::Analog4,
-            0x11 => Input::TemperatureSensorPos,
-            0x12 => Input::TemperatureSensorNeg,
-            0x13 => Input::Avdd1AvssDiffOver5Pos,
-            0x14 => Input::Avdd1AvssDiffOver5Neg,
-            0x15 => Input::PositiveReferenceVoltage,
-            0x16 => Input::NegativeReferenceVoltage,
-            _ => panic!("Invalid input value"),
-        }
+bitfield_enum! {
+    /// Input multiplexer selection.
+    ///
+    /// Used in Channel Registers to select the positive or negative input for a channel.
+    #[derive(Format, Debug, Eq, PartialEq)]
+    pub enum Input: u8 {
+        /// Analog input 0
+        Analog0 = 0x00,
+        /// Analog input 1
+        Analog1 = 0x01,
+        /// Analog input 2
+        Analog2 = 0x02,
+        /// Analog input 3
+        Analog3 = 0x03,
+        /// Analog input 4
+        Analog4 = 0x04,
+        /// Temperature sensor positive
+        TemperatureSensorPos = 0x11,
+        /// Temperature sensor negative
+        TemperatureSensorNeg = 0x12,
+        /// AVDD1-AVSS/5 positive
+        Avdd1AvssDiffOver5Pos = 0x13,
+        /// AVDD1-AVSS/5 negative
+        Avdd1AvssDiffOver5Neg = 0x14,
+        /// Positive reference voltage
+        PositiveReferenceVoltage = 0x15,
+        /// Negative reference voltage
+        NegativeReferenceVoltage = 0x16,
     }
 }
 
-#[derive(Format, Debug, Eq, PartialEq)]
-pub enum OutputCoding {
-    Unipolar = 0x00,
-    Bipolar = 0x01,
-}
-
-impl OutputCoding {
-    pub const fn into_bits(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn from_bits(value: u8) -> Self {
-        match value {
-            0x00 => OutputCoding::Unipolar,
-            0x01 => OutputCoding::Bipolar,
-            _ => panic!("Invalid output coding value"),
-        }
+bitfield_enum! {
+    /// Output coding mode for ADC data.
+    ///
+    /// Used in Setup Configuration Registers to select unipolar or bipolar output coding.
+    #[derive(Format, Debug, Eq, PartialEq)]
+    pub enum OutputCoding: u8 {
+        /// Unipolar output coding.
+        Unipolar = 0x00,
+        /// Bipolar output coding.
+        Bipolar = 0x01,
     }
 }
 
-#[derive(Format, Debug, Eq, PartialEq)]
-pub enum ReferenceSource {
-    External = 0x00,
-    Internal = 0x01,
-    Avdd1AvssDiff = 0x02,
-}
-
-impl ReferenceSource {
-    pub const fn into_bits(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn from_bits(value: u8) -> Self {
-        match value {
-            0x00 => ReferenceSource::External,
-            0x01 => ReferenceSource::Internal,
-            0x02 => ReferenceSource::Avdd1AvssDiff,
-            _ => panic!("Invalid reference source value"),
-        }
+bitfield_enum! {
+    /// Reference source selection for ADC conversions.
+    ///
+    /// Used in Setup Configuration Registers to select the reference source.
+    #[derive(Format, Debug, Eq, PartialEq)]
+    pub enum ReferenceSource: u8 {
+        /// External reference.
+        External = 0x00,
+        /// Internal reference.
+        Internal = 0x01,
+        /// AVDD1-AVSS differential reference.
+        Avdd1AvssDiff = 0x02,
     }
 }
 
-#[derive(Format, Debug, Eq, PartialEq)]
-pub enum EnhancedFilterRate {
-    Sps27 = 0x02,
-    Sps25 = 0x03,
-    Sps20 = 0x05,
-    Sps16p67 = 0x06,
-}
-
-impl EnhancedFilterRate {
-    pub const fn into_bits(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn from_bits(value: u8) -> Self {
-        match value {
-            0x02 => EnhancedFilterRate::Sps27,
-            0x03 => EnhancedFilterRate::Sps25,
-            0x05 => EnhancedFilterRate::Sps20,
-            0x06 => EnhancedFilterRate::Sps16p67,
-            _ => panic!("Invalid enhanced filter rate value"),
-        }
+bitfield_enum! {
+    /// Enhanced filter rate selection.
+    ///
+    /// Used in Filter Configuration Registers to select the enhanced filter rate.
+    #[derive(Format, Debug, Eq, PartialEq)]
+    pub enum EnhancedFilterRate: u8 {
+        /// 27 SPS
+        Sps27 = 0x02,
+        /// 25 SPS
+        Sps25 = 0x03,
+        /// 20 SPS
+        Sps20 = 0x05,
+        /// 16.67 SPS
+        Sps16p67 = 0x06,
     }
 }
 
-#[derive(Format, Debug, Eq, PartialEq)]
-pub enum FilterOrder {
-    Sinc5Sinc1 = 0x00,
-    Sinc3 = 0x03,
-}
-
-impl FilterOrder {
-    pub const fn into_bits(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn from_bits(value: u8) -> Self {
-        match value {
-            0x00 => FilterOrder::Sinc5Sinc1,
-            0x01 => FilterOrder::Sinc3,
-            _ => panic!("Invalid filter order value"),
-        }
+bitfield_enum! {
+    /// Digital filter order selection.
+    ///
+    /// Used in Filter Configuration Registers to select the filter order.
+    #[derive(Format, Debug, Eq, PartialEq)]
+    pub enum FilterOrder: u8 {
+        /// Sinc5 + Sinc1 filter order.
+        Sinc5Sinc1 = 0x00,
+        /// Sinc3 filter order.
+        Sinc3 = 0x03,
     }
 }
 
-#[derive(Format, Debug, Eq, PartialEq)]
-pub enum OutputDataRate {
-    Sps250000 = 0x00,
-    Sps125000 = 0x01,
-    Sps62500 = 0x02,
-    Sps50000 = 0x03,
-    Sps31250 = 0x04,
-    Sps25000 = 0x05,
-    Sps15625 = 0x06,
-    Sps10000 = 0x07,
-    Sps5000 = 0x08,
-    Sps2500 = 0x09,
-    Sps1000 = 0x0a,
-    Sps500 = 0x0b,
-    Sps397p5 = 0x0c,
-    Sps200 = 0x0d,
-    Sps100 = 0x0e,
-    Sps59p92 = 0x0f,
-    Sps49p96 = 0x10,
-    Sps20 = 0x11,
-    Sps16p67 = 0x12,
-    Sps10 = 0x13,
-    Sps5 = 0x14,
-}
-
-impl OutputDataRate {
-    pub const fn into_bits(self) -> u8 {
-        self as u8
-    }
-
-    pub const fn from_bits(value: u8) -> Self {
-        match value {
-            0x00 => OutputDataRate::Sps250000,
-            0x01 => OutputDataRate::Sps125000,
-            0x02 => OutputDataRate::Sps62500,
-            0x03 => OutputDataRate::Sps50000,
-            0x04 => OutputDataRate::Sps31250,
-            0x05 => OutputDataRate::Sps25000,
-            0x06 => OutputDataRate::Sps15625,
-            0x07 => OutputDataRate::Sps10000,
-            0x08 => OutputDataRate::Sps5000,
-            0x09 => OutputDataRate::Sps2500,
-            0x0a => OutputDataRate::Sps1000,
-            0x0b => OutputDataRate::Sps500,
-            0x0c => OutputDataRate::Sps397p5,
-            0x0d => OutputDataRate::Sps200,
-            0x0e => OutputDataRate::Sps100,
-            0x0f => OutputDataRate::Sps59p92,
-            0x10 => OutputDataRate::Sps49p96,
-            0x11 => OutputDataRate::Sps20,
-            0x12 => OutputDataRate::Sps16p67,
-            0x13 => OutputDataRate::Sps10,
-            0x14 => OutputDataRate::Sps5,
-            _ => panic!("Invalid output data rate value"),
-        }
+bitfield_enum! {
+    /// Output data rate selection for ADC conversions.
+    ///
+    /// Used in Filter Configuration Registers to select the output data rate.
+    #[derive(Format, Debug, Eq, PartialEq)]
+    pub enum OutputDataRate: u8 {
+        /// 250,000 samples per second
+        Sps250000 = 0x00,
+        /// 125,000 samples per second
+        Sps125000 = 0x01,
+        /// 62,500 samples per second
+        Sps62500 = 0x02,
+        /// 50,000 samples per second
+        Sps50000 = 0x03,
+        /// 31,250 samples per second
+        Sps31250 = 0x04,
+        /// 25,000 samples per second
+        Sps25000 = 0x05,
+        /// 15,625 samples per second
+        Sps15625 = 0x06,
+        /// 10,000 samples per second
+        Sps10000 = 0x07,
+        /// 5,000 samples per second
+        Sps5000 = 0x08,
+        /// 2,500 samples per second
+        Sps2500 = 0x09,
+        /// 1,000 samples per second
+        Sps1000 = 0x0a,
+        /// 500 samples per second
+        Sps500 = 0x0b,
+        /// 397.5 samples per second
+        Sps397p5 = 0x0c,
+        /// 200 samples per second
+        Sps200 = 0x0d,
+        /// 100 samples per second
+        Sps100 = 0x0e,
+        /// 59.92 samples per second
+        Sps59p92 = 0x0f,
+        /// 49.96 samples per second
+        Sps49p96 = 0x10,
+        /// 20 samples per second
+        Sps20 = 0x11,
+        /// 16.67 samples per second
+        Sps16p67 = 0x12,
+        /// 10 samples per second
+        Sps10 = 0x13,
+        /// 5 samples per second
+        Sps5 = 0x14,
     }
 }
