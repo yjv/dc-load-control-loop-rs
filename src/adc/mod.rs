@@ -1,37 +1,56 @@
 use defmt::{debug, Format};
 use embedded_hal::spi::SpiBus;
+use esp_hal::Blocking;
+use esp_hal::dma::DmaChannelFor;
+use esp_hal::gpio::{InputPin, OutputPin};
+use esp_hal::spi::{AnySpi, BitOrder};
+use esp_hal::spi::master::{Config, Instance, Spi, SpiDmaBus};
+use esp_hal::time::Rate;
 use crate::adc::register::{Register, RegisterRW, WritableRegister};
-
-// Macro to define enums with integer discriminants and implement into_bits/from_bits
-#[macro_export]
-macro_rules! bitfield_enum {
-    (
-        $(#[$meta:meta])* $vis:vis enum $name:ident : $repr:ty {
-            $(
-                $(#[$variant_meta:meta])* $variant:ident = $value:expr
-            ),+ $(,)?
-        }
-    ) => {
-        $(#[$meta])* #[repr($repr)] $vis enum $name {
-            $( $(#[$variant_meta])* $variant = $value ),+
-        }
-        impl $name {
-            pub const fn into_bits(self) -> $repr { self as $repr }
-            pub const fn from_bits(value: $repr) -> Self {
-                match value {
-                    $( $value => $name::$variant, )+
-                    _ => panic!(concat!("Invalid value for ", stringify!($name))),
-                }
-            }
-        }
-    };
-}
+use crate::initialize_dma_buffers;
 
 pub mod register;
 
-struct ADC<Bus: SpiBus> {
+#[derive(Debug)]
+pub struct ADC<Bus: SpiBus> {
     spi: Bus,
     buf: [u8; 6],
+}
+
+pub struct ReadConfiguration {
+    crc: Crc,
+    data_read_configuration: DataReadConfiguration
+}
+
+pub struct DataReadConfiguration {
+    continuous: bool,
+    status_included: bool,
+    data_register_length: DataRegisterLength,
+}
+
+impl <'d> ADC<SpiDmaBus<'d, Blocking>> {
+
+    pub fn get_spi_config() -> Config {
+        Config::default()
+            .with_frequency(Rate::from_mhz(10))
+            .with_mode(esp_hal::spi::Mode::_3)
+            .with_read_bit_order(BitOrder::MsbFirst)
+            .with_write_bit_order(BitOrder::MsbFirst)
+    }
+
+    pub fn new_with_peripherals<SpiInstance: Instance + 'static, CS: OutputPin + 'static, SCK: OutputPin + 'static, MOSI: OutputPin + 'static, MISO: InputPin + 'static, DmaChannel: DmaChannelFor<AnySpi<'d>>>(spi: SpiInstance, cs: CS, sck: SCK, mosi: MOSI, miso: MISO, dma_channel: DmaChannel) -> Self {
+        let (dma_rx_buf, dma_tx_buf) = initialize_dma_buffers();
+
+        let adc_spi = Spi::new(spi, ADC::get_spi_config()).unwrap()
+            .with_cs(cs)
+            .with_sck(sck)
+            .with_mosi(mosi)
+            .with_miso(miso)
+            .with_dma(dma_channel)
+            .with_buffers(dma_rx_buf, dma_tx_buf);
+
+        Self::new(adc_spi)
+    }
 }
 
 impl <Bus: SpiBus> ADC<Bus> {
@@ -67,6 +86,30 @@ impl <Bus: SpiBus> ADC<Bus> {
 
         self.spi.write(&self.buf[..N + 1])
     }
+}
+
+// Macro to define enums with integer discriminants and implement into_bits/from_bits
+macro_rules! bitfield_enum {
+    (
+        $(#[$meta:meta])* $vis:vis enum $name:ident : $repr:ty {
+            $(
+                $(#[$variant_meta:meta])* $variant:ident = $value:expr
+            ),+ $(,)?
+        }
+    ) => {
+        $(#[$meta])* #[repr($repr)] $vis enum $name {
+            $( $(#[$variant_meta])* $variant = $value ),+
+        }
+        impl $name {
+            pub const fn into_bits(self) -> $repr { self as $repr }
+            pub const fn from_bits(value: $repr) -> Self {
+                match value {
+                    $( $value => $name::$variant, )+
+                    _ => panic!(concat!("Invalid value for ", stringify!($name))),
+                }
+            }
+        }
+    };
 }
 
 bitfield_enum! {
